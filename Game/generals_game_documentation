@@ -1,0 +1,432 @@
+Generals Arena API Guide
+Overview
+GeneralsEnvironment is a three-player, simultaneous-turn game environment designed for human controllers, scripted bots, reinforcement-learning agents, or other AI systems.
+
+The three player IDs are:
+
+Player	ID
+    Player 1	0
+    Player 2	1
+    Player 3	2
+Each active player submits one action per turn.
+
+The game does not advance until all active players have submitted. Once the final action is received, the environment:
+
+Validates all actions.
+Resolves movement and combat simultaneously.
+Processes general captures and player eliminations.
+Applies army growth.
+Updates fog of war.
+
+Each AI should fetch its own private observation:
+
+observation = game.get_observation(player_id=0)
+
+The returned dictionary contains:
+
+{
+    "player_id": 0,
+    "turn": 12,
+    "width": 20,
+    "height": 19,
+    "max_turns": 1200,
+    "game_over": False,
+    "winner": None,
+    "draw": False,
+    "eliminated": False,
+    "active_players": [0, 1, 2],
+    "action_submitted": False,
+    "waiting_for_input": True,
+    "stats": {
+        "territory": 15,
+        "total_army": 42,
+        "castles": 1,
+    },
+    "board": [
+        # Board rows appear here
+    ],
+}
+Important observation fields:
+
+Field	Meaning
+turn	Number of completed turns
+game_over	Whether the match has ended
+winner	Winning player ID, or None
+draw	Whether the match ended in a draw
+eliminated	Whether this AI has been eliminated
+active_players	Players still in the match
+action_submitted	Whether this player already submitted
+waiting_for_input	Whether this player needs to act
+stats	The player's territory, army, and castle totals
+board	The player's fog-of-war board observation
+
+Reading the Board
+The board uses the following coordinate layout:
+
+board[y][x]
+For example, to inspect the tile at x=4, y=7:
+
+x = 4
+y = 7
+
+cell = observation["board"][y][x]
+
+print(cell["terrain"])
+print(cell["owner"])
+print(cell["army"])
+A visible cell looks like this:
+
+{
+    "x": 4,
+    "y": 7,
+    "visible": True,
+    "terrain": "plain",
+    "terrain_id": 0,
+    "owner": 0,
+    "army": 18,
+}
+
+Terrain values:
+
+Terrain	Name	ID
+Plain	"plain"	0
+Mountain	"mountain"	1
+Castle	"castle"	2
+General	"general"	3
+Unknown	"unknown"	-2
+Owner values:
+
+Owner	ID
+Neutral	-1
+Player 1	0
+Player 2	1
+Player 3	2
+Unknown	-2
+Fog of War
+Visible cells include current terrain, owner, and army information.
+
+A previously discovered but currently hidden cell preserves its terrain, but its owner and army become unknown:
+
+{
+    "x": 4,
+    "y": 7,
+    "visible": False,
+    "terrain": "plain",
+    "terrain_id": 0,
+    "owner": -2,
+    "army": -2,
+}
+A cell that has never been seen contains no information:
+
+{
+    "x": 4,
+    "y": 7,
+    "visible": False,
+    "terrain": "unknown",
+    "terrain_id": -2,
+    "owner": -2,
+    "army": -2,
+}
+An AI should not assume that hidden ownership or army values have remained unchanged.
+
+Submitting an Action
+Submit an action using:
+
+response = game.submit_action(
+    player_id,
+    action,
+)
+An action consists of:
+
+A source coordinate
+A destination coordinate
+A movement mode
+Example:
+
+action = Action(
+    source=(4, 7),
+    destination=(5, 7),
+    half=False,
+)
+
+response = game.submit_action(
+    player_id=0,
+    action=action,
+)
+The destination must be directly above, below, left, or right of the source.
+
+Diagonal movement is not allowed.
+
+Movement Modes
+All But One
+Use half=False to send all but one unit:
+
+action = Action(
+    source=(4, 7),
+    destination=(5, 7),
+    half=False,
+)
+If the source contains 10 units:
+
+9 units move
+1 unit remains
+Half
+Use half=True to send half of the source army:
+
+action = Action(
+    source=(4, 7),
+    destination=(5, 7),
+    half=True,
+)
+The number sent is calculated with:
+
+sent_army = source_army // 2
+Examples:
+
+Source Army	Sent	Remaining
+10	5	5
+11	5	6
+12	6	6
+Moving Into Friendly Tiles
+Moving armies from one owned tile into another owned tile is legal.
+
+The armies merge without combat.
+
+action = Action(
+    source=(3, 3),
+    destination=(4, 3),
+    half=False,
+)
+
+response = game.submit_action(
+    player_id=0,
+    action=action,
+)
+For example:
+
+Source army:      10
+Destination army:  6
+Movement mode:     all but one
+After movement and before growth:
+
+Source army:       1
+Destination army: 15
+The same action format is used for:
+
+Friendly transfers
+Neutral expansion
+Castle attacks
+Enemy attacks
+General attacks
+Passing
+An AI may pass instead of moving:
+
+response = game.submit_action(
+    0,
+    Action.pass_action(),
+)
+A dictionary pass is also accepted:
+
+response = game.submit_action(
+    0,
+    {
+        "type": "pass",
+    },
+)
+Passing counts as the player's submitted action for that turn.
+
+Dictionary Action Format
+Actions can also be submitted as dictionaries.
+
+This is useful when actions are coming from JSON, another process, or a network connection.
+
+response = game.submit_action(
+    0,
+    {
+        "source": [4, 7],
+        "destination": [5, 7],
+        "half": False,
+    },
+)
+The environment converts coordinate lists into tuples internally.
+
+Invalid Actions
+Invalid actions are treated as silent passes when the turn resolves.
+
+Examples of invalid actions include:
+
+Moving from a tile the player does not own
+Moving from a tile containing only one unit
+Moving diagonally
+Moving more than one tile
+Moving off the board
+Moving into a mountain
+Using invalid coordinates
+An invalid action does not crash the game.
+
+Waiting for All Three Players
+The game waits until every active player has submitted.
+
+game.submit_action(
+    0,
+    Action.pass_action(),
+)
+
+game.submit_action(
+    1,
+    Action.pass_action(),
+)
+
+result = game.submit_action(
+    2,
+    Action.pass_action(),
+)
+The third submission causes the turn to resolve.
+
+After the turn resolves:
+
+The turn number increases.
+All movement and combat are processed.
+Growth is applied.
+Fog of war is updated.
+Eliminations are processed.
+Submitted actions are cleared.
+All remaining players may submit again.
+Submission Response
+Before all players have submitted, the response looks like this:
+
+{
+    "accepted": True,
+    "turn_resolved": False,
+    "player_id": 0,
+    "turn": 0,
+    "waiting_for": [1, 2],
+    "submitted_players": [0],
+}
+The final required submission returns:
+
+{
+    "accepted": True,
+    "turn_resolved": True,
+    "turn": 1,
+    "waiting_for": [0, 1, 2],
+    "winner": None,
+    "draw": False,
+    "game_over": False,
+    "result": {
+        # Turn-resolution information
+    },
+}
+The waiting_for list contains the players expected to submit during the new turn.
+
+Always check whether a submission was accepted:
+
+response = game.submit_action(
+    player_id,
+    action,
+)
+
+if not response["accepted"]:
+    print(
+        "Submission rejected:",
+        response["reason"],
+    )
+Checking Submission Status
+Get the players who still need to submit:
+
+pending_players = game.get_pending_players()
+Example:
+
+[1, 2]
+This means Player 1 has submitted, while Players 2 and 3 have not.
+
+Check one player:
+
+if game.is_waiting_for_player(0):
+    print("Player 1 needs to submit.")
+Check whether a player has already submitted:
+
+if game.has_player_submitted(0):
+    print("Player 1 has already submitted.")
+Replacing or Withdrawing an Action
+A player may replace an action before the turn resolves:
+
+replacement = Action(
+    source=(2, 3),
+    destination=(3, 3),
+    half=True,
+)
+
+replaced = game.replace_submitted_action(
+    0,
+    replacement,
+)
+A player may also withdraw an action:
+
+withdrawn = game.withdraw_action(0)
+Both methods return True when successful and False when the player did not have a pending action.
+
+Once the final player submits and the turn resolves, the previous actions have already been cleared and cannot be changed.
+
+Getting Legal Actions
+The environment can provide possible actions for a player:
+
+legal_actions = game.get_legal_actions(
+    player_id=0,
+    include_pass=True,
+)
+The result is a list of Action objects.
+
+for action in legal_actions:
+    print(action.to_dict())
+Example action:
+
+{
+    "source": (3, 3),
+    "destination": (4, 3),
+    "half": False,
+    "is_pass": False,
+}
+
+The legal-action list includes:
+Passing
+Half movement (False)
+All-but-one movement (True)
+Friendly transfers
+Neutral expansion
+Enemy attacks
+
+Because of fog of war, the environment may include a move into a mountain when that mountain has never been seen by the player.
+If submitted, that move becomes a silent pass.
+
+Individual competing AIs should not receive this information during a fog-of-war match.
+full_state = game.get_full_state()
+This includes:
+Every tile's terrain
+Every tile's owner
+Every tile's army
+General positions
+Eliminated players
+Pending players
+Submitted players
+Previous-turn results
+
+AI Access Rules
+A competing AI should normally be allowed to use:
+game.get_observation(player_id)
+game.get_legal_actions(player_id)
+
+A competing AI should not directly access:
+game.get_full_state()
+game.get_submitted_actions()
+game.board
+game.generals
+game.pending_actions
+game.known_terrain
+Those methods and attributes are intended for:
+
+The game renderer
+Testing
+Logging
+Replay creation
+Centralized training systems
