@@ -1,12 +1,7 @@
 import pickle
 import numpy as np
+from Game.generals_game import Action
 
-# The game file lives in the Game package in your project. The fallback lets
-# this file also run when generals_game.py sits in the same folder.
-try:
-    from Game.generals_game import Action
-except ImportError:
-    from generals_game import Action
 
 # ---------------- model / search sizes ----------------
 N_FEATURES = 24          # numbers describing ONE candidate move (see build_features)
