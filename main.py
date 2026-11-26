@@ -4,6 +4,7 @@ import AIs.NathanAI.AI as ai1
 import AIs.NathanAI.trainer as ai1_trainer
 from AIs.Kal_AI.AI import AI as KalAI, PolicyNet, Adam
 from AIs.Kal_AI.trainer import episode_gradient, apply_gradients
+from functools import partial
 from multiprocessing import Pool
 import pickle
 
@@ -33,15 +34,15 @@ def random_ai_move(environment, player_id):
 def evaluate_individual(individual, kal_params):   
     env = generals_game.GeneralsEnvironment()
     nathan_ai = ai1.AI(individual)
-    kal_net = PolicyNet(kal_params)                                   
-    kal_ai = KalAI(kal_net, player_id=KAL_ID, training=True)           
+    kal_net = PolicyNet(kal_params)
+    kal_ai = KalAI(kal_net, player_id=KAL_ID, training=True)
 
     while not env.game_over:
         if env.turn == 0:
             for p in env.get_active_players():
                 env.submit_action(p, env.get_legal_actions(p, include_pass=True)[0])
 
-        kal_ai.take_turn(env)         
+        kal_ai.take_turn(env)
         random_ai_move(env, 2)
         nathan_ai.take_turn(env)
         if (not env.game_over and not env.has_player_submitted(0)
@@ -49,7 +50,7 @@ def evaluate_individual(individual, kal_params):
             env.submit_action(0, generals_game.Action.pass_action())
 
     fitness = nathan_ai.get_overlord_fitness(env)
-    kal_ai.finish_game(env)                                          
+    kal_ai.finish_game(env)
     kal_grad = episode_gradient(kal_net, kal_ai.steps)                
     return individual, fitness, nathan_ai, kal_grad, kal_ai.outcome, kal_ai.final_territory_share
 
