@@ -24,6 +24,8 @@ class TurnRecord:
     enemy_army_after: int
     eliminations_before: int
     eliminations_after: int
+    frontline_army_before: int
+    frontline_army_after: int
 
 
 # GAME METRICS
@@ -35,6 +37,7 @@ class GameMetrics:
         self.combat_fitness = 0.0
         self.overlord_fitness = 0.0
         self.strategy_usage = {0: 0, 1: 0, 2: 0}
+        self.combat_opportunities = 0
         self.strategy_history = []
         self.pending_record = None
 
@@ -176,7 +179,7 @@ class OverlordAI:
 
 
 # FITNESS SYSTEM
-def process_record(metrics, record):
+def process_record(metrics, record, env):
     land_delta = (record.territory_after - record.territory_before)
     castle_delta = (record.castles_after - record.castles_before)
     enemy_land_delta = (record.enemy_land_before - record.enemy_land_after)
@@ -184,30 +187,49 @@ def process_record(metrics, record):
     elimination_delta = (record.eliminations_after - record.eliminations_before)
     sid = record.strategy_id
 
-    if sid == 0:
-        metrics.explore_fitness += (land_delta * 3)
-        metrics.explore_fitness += (castle_delta * 50)
+    if sid == 0:  # expand
+        reward = 0
+        # Expanding is the primary job
+        reward += land_delta * 25
+
+        # Cities are huge for production
+        reward += castle_delta * 250
+
+        # Once enemies are visible, explore should become less attractive.
+        if helpers.enemy_seen(env.get_observation(PLAYER_ID)):
+            reward -= 5
+
+        metrics.explore_fitness += reward
 
     elif sid == 1:
-        territory_ratio_before = record.territory_before / max(1, record.enemy_land_before)
-        territory_ratio_after = record.territory_after / max(1, record.enemy_land_after)
-        metrics.build_fitness += (territory_ratio_after - territory_ratio_before) * 100
-        metrics.build_fitness += (castle_delta * 100)
+        frontline_delta = record.frontline_army_after - record.frontline_army_before
+        metrics.build_fitness += frontline_delta * 2
+        metrics.build_fitness += castle_delta * 50
 
     elif sid == 2:
-        metrics.combat_fitness += enemy_land_delta * 20
-        metrics.combat_fitness += enemy_army_delta * 5
-        metrics.combat_fitness += elimination_delta * 1000
+        reward = 0
+        if enemy_land_delta > 0:
+            reward += enemy_land_delta * 100
+            reward += enemy_army_delta * 10
+
+        else:
+            reward -= 2
+
+        reward += elimination_delta * 5000
+        metrics.combat_fitness += reward
 
 
 def finalize_overlord_fitness(env, metrics):
+
     fitness = (metrics.explore_fitness + metrics.build_fitness + metrics.combat_fitness)
     used_strategies = sum(1 for turns in metrics.strategy_usage.values() if turns > 20)
 
-    fitness += used_strategies * 250
+    fitness += used_strategies * 100
+    fitness += metrics.total_eliminations * 5000
 
     if env.winner == PLAYER_ID:
-        fitness += 10000
+        fitness += 25000
+        fitness += 5000 * (1 - env.turn / env.max_turns)
 
     elif PLAYER_ID not in env.eliminated_players:
         fitness += 500
@@ -247,7 +269,7 @@ def take_turn(env, metrics, overlord, explore_ai, build_ai, combat_ai):
         record.enemy_land_after = current["enemy_land"]
         record.enemy_army_after = current["enemy_army"]
         record.eliminations_after = current["eliminations"]
-        process_record(metrics, record)
+        process_record(metrics, record, env)
         metrics.pending_record = None
 
     candidate_actions = helpers.get_candidate_actions(env, PLAYER_ID, 8)
@@ -273,5 +295,5 @@ def take_turn(env, metrics, overlord, explore_ai, build_ai, combat_ai):
     env.submit_action(PLAYER_ID, action)
     metrics.pending_record = TurnRecord(env.turn, strategy_id, action, before["territory"], 0, before["army"], 0,
                                         before["castles"], 0, before["enemy_land"], 0, before["enemy_army"], 0,
-                                        before["eliminations"], 0)
+                                        before["eliminations"], 0, before["front_line_army"], 0)
     return

@@ -58,7 +58,8 @@ def create_snapshot(env, player_id):
         enemy_army += a
 
     return {"territory": territory, "army": army, "castles": castles, "enemy_land": enemy_land,
-            "enemy_army": enemy_army, "eliminations": len(env.eliminated_players)}
+            "enemy_army": enemy_army, "eliminations": len(env.eliminated_players),
+            "frontline_army": frontline_score(env, player_id)}
 
 
 # CANDIDATE ACTION FEATURES
@@ -157,3 +158,33 @@ def get_largest_stack(env, player_id):
 
 def enemy_seen(obs):
     return int(get_visible_enemy_tiles(obs) > 0)
+
+
+def frontline_score(env, player_id):
+
+    score = 0
+
+    for y in range(env.height):
+        for x in range(env.width):
+
+            pos = (x, y)
+            tile = env.tile(pos)
+
+            if tile.owner != player_id:
+                continue
+
+            touching_frontier = False
+
+            for n in env.neighbors(pos):
+
+                n_tile = env.tile(n)
+
+                if n_tile.owner != player_id:
+
+                    touching_frontier = True
+                    break
+
+            if touching_frontier:
+                score += tile.army
+
+    return score
