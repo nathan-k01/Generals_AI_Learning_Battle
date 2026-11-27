@@ -98,7 +98,7 @@ class GreedyAI:
         half = np.fromiter((a.half for a in legal), bool, len(legal))
 
         src_army = army[sy, sx]
-        sent = np.where(half, src_army // 2, src_army - 1)     # same rule as the engine
+        sent = np.where(half, src_army // 2, src_army - 1)     
         o, t, vis, defenders = owner[dy, dx], terrain[dy, dx], visible[dy, dx], army[dy, dx]
 
         move_value = np.zeros(len(legal))
