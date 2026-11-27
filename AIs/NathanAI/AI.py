@@ -39,6 +39,7 @@ class GameMetrics:
         self.strategy_usage = {0: 0, 1: 0, 2: 0}
         self.combat_opportunities = 0
         self.strategy_history = []
+        self.total_eliminations = 0
         self.pending_record = None
 
 
@@ -295,5 +296,5 @@ def take_turn(env, metrics, overlord, explore_ai, build_ai, combat_ai):
     env.submit_action(PLAYER_ID, action)
     metrics.pending_record = TurnRecord(env.turn, strategy_id, action, before["territory"], 0, before["army"], 0,
                                         before["castles"], 0, before["enemy_land"], 0, before["enemy_army"], 0,
-                                        before["eliminations"], 0, before["front_line_army"], 0)
+                                        before["eliminations"], 0, before["frontline_army"], 0)
     return
