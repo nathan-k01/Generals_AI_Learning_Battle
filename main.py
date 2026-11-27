@@ -1,10 +1,12 @@
 import random
 from Game import generals_game
+
 import AIs.NathanAI.AI as ai1
 import AIs.NathanAI.trainer as ai1_trainer
-# from AIs.Kal_AI.AI import AI as KalAI, PolicyNet, Adam
-# from AIs.Kal_AI.trainer import episode_gradient, apply_gradients
-from functools import partial
+
+import AIs.Kal_AI.AI as ai2
+import AIs.Kal_AI.Trainer as ai2_trainer
+
 from multiprocessing import Pool
 import pickle
 import os
@@ -12,7 +14,7 @@ import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 KAL_ID = 1
-KAL_CHECKPOINT = "kal_latest.pkl"
+
 
 training_history = {
     "generation": [],
@@ -48,21 +50,23 @@ def random_ai_move(environment, player_id):
         environment.submit_action(player_id, random.choice(legal))
 
 
-def evaluate_individual(individual):
+def evaluate_individual(individual, kal_weights):   # Kal's candidate weights for this game
     turn_history = []
     env = generals_game.GeneralsEnvironment()
     nathan_ai = ai1.AI(individual)
-    # kal_net = PolicyNet(kal_params)
-    # kal_ai = KalAI(kal_net, player_id=KAL_ID, training=True)
+
+
+    kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)   # Greedy AI using this candidate's weights
+    
 
     while not env.game_over:
         if env.turn == 0:
             for p in env.get_active_players():
                 env.submit_action(p, env.get_legal_actions(p, include_pass=True)[0])
 
-        # kal_ai.take_turn(env)
+
         random_ai_move(env, 2)
-        random_ai_move(env, 1)
+        kal_ai.take_turn(env)
         nathan_ai.take_turn(env)
         if (not env.game_over and not env.has_player_submitted(0)
                 and 0 not in env.eliminated_players):
@@ -73,12 +77,15 @@ def evaluate_individual(individual):
 
     fitness = nathan_ai.get_overlord_fitness(env)
 
+    kal_ai.finish_game(env)
 
-    return individual, fitness, nathan_ai, turn_history
+    return (individual, fitness, nathan_ai, kal_ai.outcome, kal_ai.final_territory_share, turn_history,
+            kal_weights, kal_ai.get_fitness(env))
 
 
 if __name__ == "__main__":
     trainer = ai1_trainer.NathanTrainer(population_size=50)
+    kal_trainer = ai2_trainer.KalTrainer(population_size=50)   # tunes Kal_AI's scoring weights
     highest_fitness = float("-inf")
     generation = 0
     if os.path.exists("best_ever.pkl"):
@@ -96,18 +103,14 @@ if __name__ == "__main__":
         highest_fitness = (champion["fitness"])
         generation = (champion["generation"] + 1)
 
-
-    """if os.path.exists(KAL_CHECKPOINT):
-        kal_net = PolicyNet.load(KAL_CHECKPOINT)
-        print("Loaded Kal_AI weights")
     else:
-        kal_net = PolicyNet(seed=0)
-        kal_optimizer = Adam(kal_net.params, lr=0.005)"""
+        highest_fitness = float("-inf")
+        generation = 0
 
     while True:
 
         with Pool() as pool:
-            results = pool.map(partial(evaluate_individual), trainer.population)
+            results = pool.starmap(evaluate_individual, zip(trainer.population, kal_trainer.population))
 
         scored_individuals = [r[:3] for r in results]
 
@@ -130,13 +133,19 @@ if __name__ == "__main__":
         print(f"Worst Fitness: {worst_fitness}")
         best_metrics.print_fitness_breakdown()
 
-        # apply_gradients(kal_net, kal_optimizer, [r[3] for r in results])
-        # kal_net.save(KAL_CHECKPOINT)
-        # print(f"Kal_AI: wins={[r[4] for r in results].count('win')}/{len(results)} "
-        #       f"avg land share={sum(r[5] for r in results) / len(results):.3f}")
+        kal_scored = [(r[6], r[4] + (1.0 if r[3] == "win" else 0.0)) for r in results]
+        kal_best = max(kal_scored, key=lambda x: x[1])
+        kal_trainer.save_best(kal_best[0], kal_best[1])
+        print(f"Kal_AI: wins={[r[3] for r in results].count('win')}/{len(results)} "
+              f"avg land share={sum(r[4] for r in results) / len(results):.3f} "
+              f"best fitness={kal_best[1]:.3f}")
+        kal_trainer.next_generation(kal_scored)
+
         trainer.next_generation(scored_individuals)
         generation += 1
-        first_match_history = results[0][3]
+
+        best_result = max(results, key=lambda r: r[1])
+        first_match_history = best_result[5]
 
         replay_packet = {
             "generation": generation,
@@ -145,15 +154,22 @@ if __name__ == "__main__":
             "worst": worst_fitness,
             "history": first_match_history,
 
-            "explore": best_metrics.metrics.explore_fitness,
-            "build": best_metrics.metrics.build_fitness,
-            "combat": best_metrics.metrics.combat_fitness,
+            "expand": best_metrics.metrics.expand_fitness,
+            "economy": best_metrics.metrics.economy_fitness,
+            "attack": best_metrics.metrics.attack_fitness,
+            "defense": best_metrics.metrics.defense_fitness,
+            "assassin": best_metrics.metrics.assassin_fitness,
             "overlord": best_metrics.metrics.overlord_fitness,
 
-            "usage": best_metrics.metrics.strategy_usage.copy()
+            "usage": best_metrics.metrics.strategy_usage.copy(),
+
+            "kal_wins": [r[3] for r in results].count("win"),
+            "kal_games": len(results),
+            "kal_land": sum(r[4] for r in results) / len(results),
+            "kal_best_fitness": kal_best[1],
+            "kal_weights": kal_best[0],
         }
 
         with open("live_replay.pkl", "wb") as f:
             pickle.dump(replay_packet, f)
-
 
