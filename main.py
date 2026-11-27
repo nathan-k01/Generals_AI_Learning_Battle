@@ -15,7 +15,6 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 KAL_ID = 1
 
-
 training_history = {
     "generation": [],
     "best": [],
@@ -45,12 +44,12 @@ def random_ai_move(environment, player_id):
         environment.submit_action(player_id, random.choice(legal))
 
 
-def evaluate_individual(individual, kal_weights):   # Kal's candidate weights for this game
+def evaluate_individual(individual, kal_weights):  
     turn_history = []
     env = generals_game.GeneralsEnvironment()
     nathan_ai = ai1.AI(individual)
 
-    kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)   # Greedy AI using this candidate's weights
+    kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)  
 
     while not env.game_over:
         if env.turn == 0:
@@ -77,7 +76,7 @@ def evaluate_individual(individual, kal_weights):   # Kal's candidate weights fo
 
 if __name__ == "__main__":
     nate_trainer = ai1_trainer.NathanTrainer(population_size=50)
-    kal_trainer = ai2_trainer.KalTrainer(population_size=50)   # tunes Kal_AI's scoring weights
+    kal_trainer = ai2_trainer.KalTrainer(population_size=50)   
     highest_fitness = float("-inf")
     generation = 0
     if os.path.exists("best_ever.pkl"):
@@ -146,9 +145,11 @@ if __name__ == "__main__":
             "worst": worst_fitness,
             "history": first_match_history,
 
-            "explore": best_metrics.metrics.explore_fitness,
-            "combat": best_metrics.metrics.combat_fitness,
-            "build": best_metrics.metrics.build_fitness,
+            "expand": best_metrics.metrics.expand_fitness,
+            "economy": best_metrics.metrics.economy_fitness,
+            "attack": best_metrics.metrics.attack_fitness,
+            "defense": best_metrics.metrics.defense_fitness,
+            "assassin": best_metrics.metrics.assassin_fitness,
             "overlord": best_metrics.metrics.overlord_fitness,
 
             "usage": best_metrics.metrics.strategy_usage.copy(),
@@ -162,4 +163,3 @@ if __name__ == "__main__":
 
         with open("live_replay.pkl", "wb") as f:
             pickle.dump(replay_packet, f)
-
