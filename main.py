@@ -50,13 +50,13 @@ def random_ai_move(environment, player_id):
         environment.submit_action(player_id, random.choice(legal))
 
 
-def evaluate_individual(individual, kal_weights):   # Kal's candidate weights for this game
+def evaluate_individual(individual, kal_weights):   
     turn_history = []
     env = generals_game.GeneralsEnvironment()
     nathan_ai = ai1.AI(individual)
 
 
-    kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)   # Greedy AI using this candidate's weights
+    kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)   
     
 
     while not env.game_over:
@@ -85,7 +85,7 @@ def evaluate_individual(individual, kal_weights):   # Kal's candidate weights fo
 
 if __name__ == "__main__":
     trainer = ai1_trainer.NathanTrainer(population_size=50)
-    kal_trainer = ai2_trainer.KalTrainer(population_size=50)   # tunes Kal_AI's scoring weights
+    kal_trainer = ai2_trainer.KalTrainer(population_size=50)   
     highest_fitness = float("-inf")
     generation = 0
     if os.path.exists("best_ever.pkl"):
