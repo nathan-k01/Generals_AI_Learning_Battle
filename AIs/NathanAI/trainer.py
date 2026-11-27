@@ -31,13 +31,13 @@ class NathanTrainer:
 
 
 class GenomeManager:
-    SPECIALIST_INPUTS = 40
-    SPECIALIST_HIDDEN = 16
+    SPECIALIST_INPUTS = 80
+    SPECIALIST_HIDDEN = 32
     SPECIALIST_OUTPUTS = 8
 
-    OVERLORD_INPUTS = 9
-    OVERLORD_HIDDEN = 20
-    OVERLORD_OUTPUTS = 5
+    OVERLORD_INPUTS = 14
+    OVERLORD_HIDDEN = 24
+    OVERLORD_OUTPUTS = 3
 
     @classmethod
     def specialist_size(cls):
@@ -57,14 +57,8 @@ class GenomeManager:
     @classmethod
     def create_individual(cls):
         specialist = cls.specialist_size()
-        return {
-            "overlord": cls.random_genome(cls.overlord_size()),
-            "expand": cls.random_genome(specialist),
-            "economy": cls.random_genome(specialist),
-            "attack": cls.random_genome(specialist),
-            "defense": cls.random_genome(specialist),
-            "assassin": cls.random_genome(specialist)
-        }
+        return {"overlord": cls.random_genome(cls.overlord_size()), "explore": cls.random_genome(specialist),
+                "build": cls.random_genome(specialist), "combat": cls.random_genome(specialist)}
 
 
 class Mutator:

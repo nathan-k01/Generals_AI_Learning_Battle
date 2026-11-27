@@ -1,4 +1,6 @@
 import math
+import random
+from . import helpers
 from dataclasses import dataclass
 import numpy as np
 
@@ -28,156 +30,46 @@ class TurnRecord:
 class GameMetrics:
     def __init__(self):
         self.records = []
-        self.expand_fitness = 0.0
-        self.economy_fitness = 0.0
-        self.attack_fitness = 0.0
-        self.defense_fitness = 0.0
-        self.assassin_fitness = 0.0
+        self.explore_fitness = 0.0
+        self.build_fitness = 0.0
+        self.combat_fitness = 0.0
         self.overlord_fitness = 0.0
-        self.strategy_usage = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+        self.strategy_usage = {0: 0, 1: 0, 2: 0}
         self.strategy_history = []
-
-
-# GENERAL HELPERS
-def get_enemy_stats(env, player_id):
-    enemy_land = []
-    enemy_army = []
-    for pid in env.get_active_players():
-        if pid == player_id:
-            continue
-        territory, army, _ = env.get_stats(pid)
-        enemy_land.append(territory)
-        enemy_army.append(army)
-    return max(enemy_land, default=0), max(enemy_army, default=0)
-
-
-def get_visible_enemy_tiles(obs):
-    count = 0
-    owner_id = obs["player_id"]
-    for row in obs["board"]:
-        for cell in row:
-            if not cell["visible"]:
-                continue
-            owner = cell["owner"]
-            if owner not in (-1, None, owner_id):
-                count += 1
-    return count
-
-
-def get_neutral_tiles(obs):
-    count = 0
-    for row in obs["board"]:
-        for cell in row:
-            if not cell["visible"]:
-                continue
-            if cell["owner"] is None:
-                count += 1
-    return count
-
-
-def get_visible_cities(obs):
-    count = 0
-    for row in obs["board"]:
-        for cell in row:
-            if cell["visible"] and cell["terrain"] == "castle":
-                count += 1
-    return count
-
-
-# SNAPSHOTS
-def create_snapshot(env, player_id):
-
-    territory, army, castles = env.get_stats(player_id)
-    enemy_land = 0
-    enemy_army = 0
-    for pid in env.get_active_players():
-        if pid == player_id:
-            continue
-        t, a, _ = env.get_stats(pid)
-        enemy_land += t
-        enemy_army += a
-
-    return {"territory": territory, "army": army, "castles": castles, "enemy_land": enemy_land,
-            "enemy_army": enemy_army, "eliminations": len(env.eliminated_players)}
-
-
-# CANDIDATE ACTION FEATURES
-def get_action_features(env, player_id, action):
-    if action.is_pass:
-        return [0, 0, 0, 0]
-
-    source_tile = env.tile(action.source)
-    target_tile = env.tile(action.destination)
-
-    if target_tile.owner == player_id:
-        owner_type = 0
-
-    elif target_tile.owner is None:
-        owner_type = 1
-
-    else:
-        owner_type = 2
-
-    return [float(source_tile.army), float(owner_type), float(int(target_tile.terrain)), float(int(action.half))]
-
-
-def build_candidate_action_block(env, player_id, actions, limit=8):
-    features = []
-    for action in actions:
-        features.extend(get_action_features(env, player_id, action))
-
-    while len(features) < limit * 4:
-        features.extend([0, 0, 0, 0])
-
-    return features
-
-
-def get_candidate_actions(env, player_id, limit=8):
-    actions = env.get_legal_actions(player_id, include_pass=False)
-
-    def score(action):
-        source_tile = env.tile(action.source)
-        target_tile = env.tile(action.destination)
-        value = source_tile.army
-
-        if target_tile.owner != player_id:
-            value += 25
-
-        return value
-
-    actions.sort(key=score, reverse=True)
-    return actions[:limit]
+        self.pending_record = None
 
 
 # AI CONTAINER
 class AI:
+
     def __init__(self, genome_package):
-        self.metrics = GameMetrics()
         self.overlord = OverlordAI(genome_package["overlord"])
-        self.expand_ai = ExpandAI(genome_package["expand"])
-        self.economy_ai = EconomyAI(genome_package["economy"])
-        self.attack_ai = AttackAI(genome_package["attack"])
-        self.defense_ai = DefenseAI(genome_package["defense"])
-        self.assassin_ai = AssassinAI(genome_package["assassin"])
+        self.explore_ai = ExplorerAI(genome_package["explore"])
+        self.build_ai = BuildAI(genome_package["build"])
+        self.combat_ai = CombatAI(genome_package["combat"])
         self.metrics = GameMetrics()
 
     def take_turn(self, env):
-        return take_turn(env=env, metrics=self.metrics, overlord=self.overlord, expand_ai=self.expand_ai,
-                         economy_ai=self.economy_ai, attack_ai=self.attack_ai, defense_ai=self.defense_ai,
-                         assassin_ai=self.assassin_ai)
+        return take_turn(env=env, metrics=self.metrics, overlord=self.overlord, explore_ai=self.explore_ai,
+                         build_ai=self.build_ai, combat_ai=self.combat_ai)
 
     def get_overlord_fitness(self, env):
         return finalize_overlord_fitness(env, self.metrics)
 
     def print_fitness_breakdown(self):
         print("\n========== FITNESS ==========")
-        print(f"Expand:    {self.metrics.expand_fitness:.2f}")
-        print(f"Economy:   {self.metrics.economy_fitness:.2f}")
-        print(f"Attack:    {self.metrics.attack_fitness:.2f}")
-        print(f"Defense:   {self.metrics.defense_fitness:.2f}")
-        print(f"Assassin:  {self.metrics.assassin_fitness:.2f}")
-        print(f"Overlord:  {self.metrics.overlord_fitness:.2f}")
-        print("Strategy Usage:", self.metrics.strategy_usage)
+        print(f"Explore:  {self.metrics.explore_fitness:.2f}")
+        print(f"Build:    {self.metrics.build_fitness:.2f}")
+        print(f"Combat:   {self.metrics.combat_fitness:.2f}")
+        print(f"Overlord: {self.metrics.overlord_fitness:.2f}")
+
+        print(f"Strategy Usage: {self.metrics.strategy_usage}")
+
+        total_turns = sum(self.metrics.strategy_usage.values())
+        if total_turns > 0:
+            print(f"Explore % : {100 * self.metrics.strategy_usage[0] / total_turns:.1f}")
+            print(f"Build %   : {100 * self.metrics.strategy_usage[1] / total_turns:.1f}")
+            print(f"Combat %  : {100 * self.metrics.strategy_usage[2] / total_turns:.1f}")
         print("=============================\n")
 
 
@@ -205,7 +97,7 @@ class NeuralNet:
 
 # STRATEGY BASE
 class StrategyAI:
-    INPUT_SIZE = 40
+    INPUT_SIZE = 80
     ACTION_CHOICES = 8
 
     def __init__(self, genome):
@@ -227,121 +119,98 @@ class StrategyAI:
 
 # SPECIALIST AIs
 class ExpandAI(StrategyAI):
-    def build_ai_state(self,env, candidate_actions):
+    def build_ai_state(self, env, candidate_actions):
         obs = env.get_observation(PLAYER_ID)
         territory, army, castles = env.get_stats(PLAYER_ID)
-        state = [territory, get_neutral_tiles(obs), get_visible_enemy_tiles(obs),
+        state = [territory, helpers.get_neutral_tiles(obs), helpers.get_visible_enemy_tiles(obs),
                  army, castles, env.turn, env.width, env.height]
-        state.extend(build_candidate_action_block(env, PLAYER_ID, candidate_actions))
+        state.extend(helpers.build_candidate_action_block(env, PLAYER_ID, candidate_actions))
         self.np_array = np.array(state, dtype=np.float32)
 
 
-class EconomyAI(StrategyAI):
+class ExplorerAI(StrategyAI):
     def build_ai_state(self, env, candidate_actions):
-        territory, army, castles = env.get_stats(PLAYER_ID)
-        largest_enemy_land, largest_enemy_army = get_enemy_stats(env, PLAYER_ID)
-        state = [army, territory, castles, largest_enemy_army, army / max(1, largest_enemy_army),
-                 env.turn, len(env.get_active_players()), territory + castles]
-        state.extend(build_candidate_action_block(env, PLAYER_ID, candidate_actions))
-        self.np_array = np.array(state, dtype=np.float32)
-
-
-class AttackAI(StrategyAI):
-    def build_ai_state(self, env, candidate_actions):
-        territory, army, castles = (env.get_stats(PLAYER_ID))
         obs = env.get_observation(PLAYER_ID)
-        largest_enemy_land, largest_enemy_army = (get_enemy_stats(env,PLAYER_ID))
-        state = [army, territory, largest_enemy_army, largest_enemy_land, get_visible_enemy_tiles(obs),
-                 army / max(1, largest_enemy_army), len(env.get_active_players()), env.turn]
-        state.extend(build_candidate_action_block(env, PLAYER_ID, candidate_actions))
-        self.np_array = np.array(state, dtype=np.float32)
-
-
-class DefenseAI(StrategyAI):
-    def build_ai_state(self, env, candidate_actions):
         territory, army, castles = (env.get_stats(PLAYER_ID))
-        largest_enemy_land, largest_enemy_army = (get_enemy_stats(env, PLAYER_ID))
-        state = [territory, army, castles, largest_enemy_army, largest_enemy_land,
-                 territory - largest_enemy_land, army - largest_enemy_army, env.turn]
-        state.extend(build_candidate_action_block(env, PLAYER_ID, candidate_actions))
+        state = [territory, army, castles, helpers.get_neutral_tiles(obs), helpers.get_visible_enemy_tiles(obs),
+                 helpers.get_visible_cities(obs), env.turn, len(env.get_active_players())]
+        state.extend(helpers.build_candidate_action_block(env, PLAYER_ID, candidate_actions))
         self.np_array = np.array(state, dtype=np.float32)
 
 
-class AssassinAI(StrategyAI):
-    def build_ai_state(self, env, candidate_actions):
-        territory, army, castles = env.get_stats(PLAYER_ID)
-        obs = env.get_observation(PLAYER_ID)
-        state = [army, territory, get_visible_enemy_tiles(obs), castles, len(env.get_active_players()),
-                 env.turn, env.width, env.height]
-        state.extend(build_candidate_action_block(env, PLAYER_ID, candidate_actions))
-        self.np_array = np.array(state, dtype=np.float32)
+class BuildAI(ExplorerAI):
+    pass
+
+
+class CombatAI(ExplorerAI):
+    pass
 
 
 # OVERLORD
 class OverlordAI:
-    INPUT_SIZE = 9
+    INPUT_SIZE = 14
 
     def __init__(self, genome):
         self.np_array = None
-        self.brain = NeuralNet(genome, self.INPUT_SIZE, 20, 5)
+        self.brain = NeuralNet(genome, self.INPUT_SIZE, 24, 3)
 
     def build_overlord_state(self, env):
         obs = env.get_observation(PLAYER_ID)
+        territory, army, castles = (env.get_stats(PLAYER_ID))
+        largest_enemy_land, largest_enemy_army = (helpers.get_enemy_stats(env, PLAYER_ID))
+        army_ratio = (army / max(1, largest_enemy_army))
+        territory_ratio = (territory / max(1, largest_enemy_land))
 
-        territory, army, castles = env.get_stats(PLAYER_ID)
-        largest_enemy_land, largest_enemy_army = get_enemy_stats(env, PLAYER_ID)
-
-        self.np_array = np.array([env.turn, territory, army, castles, len(env.get_active_players()),
-                                  largest_enemy_land, largest_enemy_army, get_visible_enemy_tiles(obs),
-                                  get_neutral_tiles(obs)], dtype=np.float32)
+        self.np_array = np.array([
+            env.turn, territory, army, castles, largest_enemy_land, largest_enemy_army, army_ratio, territory_ratio,
+            helpers.get_visible_enemy_tiles(obs), helpers.get_neutral_tiles(obs), helpers.get_visible_cities(obs),
+            helpers.get_frontline_tiles(env, PLAYER_ID), helpers.get_largest_stack(env, PLAYER_ID),
+            len(env.get_active_players())], dtype=np.float32)
 
     def choose_strategy(self, state):
+        if random.random() < 0.20:
+            return random.randint(0, 2)
+
         outputs = self.brain.forward(state)
         return int(np.argmax(outputs))
 
 
 # FITNESS SYSTEM
 def process_record(metrics, record):
-    land_delta = record.territory_after - record.territory_before
-    army_delta = record.army_after - record.army_before
-    castle_delta = record.castles_after - record.castles_before
-    enemy_land_delta = record.enemy_land_before - record.enemy_land_after
-    enemy_army_delta = record.enemy_army_before - record.enemy_army_after
-    elimination_delta = record.eliminations_after - record.eliminations_before
-
+    land_delta = (record.territory_after - record.territory_before)
+    castle_delta = (record.castles_after - record.castles_before)
+    enemy_land_delta = (record.enemy_land_before - record.enemy_land_after)
+    enemy_army_delta = (record.enemy_army_before - record.enemy_army_after)
+    elimination_delta = (record.eliminations_after - record.eliminations_before)
     sid = record.strategy_id
 
     if sid == 0:
-        metrics.expand_fitness += land_delta * 10
-        metrics.expand_fitness += castle_delta * 50
+        metrics.explore_fitness += (land_delta * 3)
+        metrics.explore_fitness += (castle_delta * 50)
 
     elif sid == 1:
-        metrics.economy_fitness += army_delta * 5
-        metrics.economy_fitness += castle_delta * 250
+        territory_ratio_before = record.territory_before / max(1, record.enemy_land_before)
+        territory_ratio_after = record.territory_after / max(1, record.enemy_land_after)
+        metrics.build_fitness += (territory_ratio_after - territory_ratio_before) * 100
+        metrics.build_fitness += (castle_delta * 100)
 
     elif sid == 2:
-        metrics.attack_fitness += enemy_land_delta * 15
-        metrics.attack_fitness += enemy_army_delta * 2
-        metrics.attack_fitness += elimination_delta * 5000
-
-    elif sid == 3:
-        metrics.defense_fitness += max(0, land_delta)
-        metrics.defense_fitness -= max(0, -land_delta) * 10
-
-    elif sid == 4:
-        metrics.assassin_fitness += elimination_delta * 10000
+        metrics.combat_fitness += enemy_land_delta * 20
+        metrics.combat_fitness += enemy_army_delta * 5
+        metrics.combat_fitness += elimination_delta * 1000
 
 
 def finalize_overlord_fitness(env, metrics):
-    specialist_score = (metrics.expand_fitness + metrics.economy_fitness + metrics.attack_fitness +
-                        metrics.defense_fitness + metrics.assassin_fitness)
-    fitness = specialist_score
+    fitness = (metrics.explore_fitness + metrics.build_fitness + metrics.combat_fitness)
+    used_strategies = sum(1 for turns in metrics.strategy_usage.values() if turns > 20)
+
+    fitness += used_strategies * 250
 
     if env.winner == PLAYER_ID:
         fitness += 10000
 
     elif PLAYER_ID not in env.eliminated_players:
-        fitness += 3000
+        fitness += 500
 
     total_turns = sum(metrics.strategy_usage.values())
 
@@ -354,7 +223,7 @@ def finalize_overlord_fitness(env, metrics):
             p = turns / total_turns
             entropy -= (p * math.log(p))
         # reward diversity
-        fitness += entropy * 500
+        fitness += entropy * 50
 
     switches = 0
     for i in range(1, len(metrics.strategy_history)):
@@ -362,23 +231,35 @@ def finalize_overlord_fitness(env, metrics):
             switches += 1
 
     # punish excessive switching
-    fitness -= switches * 5
+    fitness -= switches * .5
     metrics.overlord_fitness = fitness
     return fitness
 
 
 # TURN EXECUTION
-def take_turn(env, metrics, overlord, expand_ai, economy_ai, attack_ai, defense_ai, assassin_ai):
-    candidate_actions = get_candidate_actions(env, PLAYER_ID, 8)
+def take_turn(env, metrics, overlord, explore_ai, build_ai, combat_ai):
+    if metrics.pending_record is not None:
+        current = helpers.create_snapshot(env, PLAYER_ID)
+        record = metrics.pending_record
+        record.territory_after = current["territory"]
+        record.army_after = current["army"]
+        record.castles_after = current["castles"]
+        record.enemy_land_after = current["enemy_land"]
+        record.enemy_army_after = current["enemy_army"]
+        record.eliminations_after = current["eliminations"]
+        process_record(metrics, record)
+        metrics.pending_record = None
+
+    candidate_actions = helpers.get_candidate_actions(env, PLAYER_ID, 8)
 
     if len(candidate_actions) == 0:
-        print("TAKE TURN RETURNED NONE")
+        env.submit_action(PLAYER_ID, env.get_legal_actions(PLAYER_ID, include_pass=True))
         return None
 
-    before = create_snapshot(env, PLAYER_ID)
+    before = helpers.create_snapshot(env, PLAYER_ID)
     overlord.build_overlord_state(env)
     strategy_id = overlord.choose_strategy(overlord.np_array)
-    strategy_lookup = {0: expand_ai, 1: economy_ai, 2: attack_ai, 3: defense_ai, 4: assassin_ai}
+    strategy_lookup = {0: explore_ai, 1: build_ai, 2: combat_ai}
     strategy_ai = strategy_lookup[strategy_id]
     strategy_ai.build_ai_state(env, candidate_actions)
     action = strategy_ai.choose_move(strategy_ai.np_array, candidate_actions)
@@ -390,17 +271,7 @@ def take_turn(env, metrics, overlord, expand_ai, economy_ai, attack_ai, defense_
     metrics.strategy_usage[strategy_id] += 1
     metrics.strategy_history.append(strategy_id)
     env.submit_action(PLAYER_ID, action)
-    after = create_snapshot(env, PLAYER_ID)
-
-    record = TurnRecord(
-        turn=env.turn, strategy_id=strategy_id, action=action,
-        territory_before=before["territory"], territory_after=after["territory"],
-        army_before=before["army"], army_after=after["army"],
-        castles_before=before["castles"], castles_after=after["castles"],
-        enemy_land_before=before["enemy_land"], enemy_land_after=after["enemy_land"],
-        enemy_army_before=before["enemy_army"], enemy_army_after=after["enemy_army"],
-        eliminations_before=before["eliminations"], eliminations_after=after["eliminations"]
-    )
-    metrics.records.append(record)
-    process_record(metrics, record)
-    return action
+    metrics.pending_record = TurnRecord(env.turn, strategy_id, action, before["territory"], 0, before["army"], 0,
+                                        before["castles"], 0, before["enemy_land"], 0, before["enemy_army"], 0,
+                                        before["eliminations"], 0)
+    return
