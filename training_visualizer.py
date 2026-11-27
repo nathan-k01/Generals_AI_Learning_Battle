@@ -258,7 +258,6 @@ while running:
 
             usage = replay_data.get("usage", {})
             kw = replay_data.get("kal_weights", {})
-
             lines = [
 
                 f"Generation: {replay_data['generation']}",

@@ -180,7 +180,7 @@ class GeneralsEnvironment:
         self,
         seed: Optional[int] = None,
         fog_of_war: bool = True,
-        max_turns: int = 1200,
+        max_turns: int = 400,
     ):
         self.fog_of_war = fog_of_war
         self.max_turns = max_turns
@@ -1089,12 +1089,6 @@ class GeneralsEnvironment:
                     Terrain.CASTLE,
                 ):
                     if tile.owner in PLAYER_IDS:
-                        tile.army += 1
-
-                    elif (
-                        tile.terrain == Terrain.CASTLE
-                        and tile.army < 40
-                    ):
                         tile.army += 1
 
                 if (

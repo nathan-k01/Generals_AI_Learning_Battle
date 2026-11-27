@@ -21,15 +21,10 @@ training_history = {
     "best": [],
     "avg": [],
     "worst": [],
-
     "expand": [],
-    "economy": [],
-    "attack": [],
-    "defense": [],
-    "assassin": [],
-
+    "combat": [],
+    "build": [],
     "win_rate": [],
-
     "territory": [],
     "army": [],
     "castles": [],
@@ -55,15 +50,12 @@ def evaluate_individual(individual, kal_weights):   # Kal's candidate weights fo
     env = generals_game.GeneralsEnvironment()
     nathan_ai = ai1.AI(individual)
 
-
     kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)   # Greedy AI using this candidate's weights
-    
 
     while not env.game_over:
         if env.turn == 0:
             for p in env.get_active_players():
                 env.submit_action(p, env.get_legal_actions(p, include_pass=True)[0])
-
 
         random_ai_move(env, 2)
         kal_ai.take_turn(env)
@@ -84,7 +76,7 @@ def evaluate_individual(individual, kal_weights):   # Kal's candidate weights fo
 
 
 if __name__ == "__main__":
-    trainer = ai1_trainer.NathanTrainer(population_size=50)
+    nate_trainer = ai1_trainer.NathanTrainer(population_size=50)
     kal_trainer = ai2_trainer.KalTrainer(population_size=50)   # tunes Kal_AI's scoring weights
     highest_fitness = float("-inf")
     generation = 0
@@ -93,12 +85,12 @@ if __name__ == "__main__":
             champion = pickle.load(file)
 
         print(f"Loaded Champion "f"(Generation {champion['generation']}) "f"Fitness={champion['fitness']}")
-        trainer.population[0] = (champion["genome"])
+        nate_trainer.population[0] = (champion["genome"])
 
-        for i in range(1, len(trainer.population)):
-            child = trainer.mutator.crossover(champion["genome"], champion["genome"])
-            trainer.mutator.mutate_individual(child)
-            trainer.population[i] = child
+        for i in range(1, len(nate_trainer.population)):
+            child = nate_trainer.mutator.crossover(champion["genome"], champion["genome"])
+            nate_trainer.mutator.mutate_individual(child)
+            nate_trainer.population[i] = child
 
         highest_fitness = (champion["fitness"])
         generation = (champion["generation"] + 1)
@@ -110,7 +102,7 @@ if __name__ == "__main__":
     while True:
 
         with Pool() as pool:
-            results = pool.starmap(evaluate_individual, zip(trainer.population, kal_trainer.population))
+            results = pool.starmap(evaluate_individual, zip(nate_trainer.population, kal_trainer.population))
 
         scored_individuals = [r[:3] for r in results]
 
@@ -139,9 +131,9 @@ if __name__ == "__main__":
         print(f"Kal_AI: wins={[r[3] for r in results].count('win')}/{len(results)} "
               f"avg land share={sum(r[4] for r in results) / len(results):.3f} "
               f"best fitness={kal_best[1]:.3f}")
-        kal_trainer.next_generation(kal_scored)
 
-        trainer.next_generation(scored_individuals)
+        kal_trainer.next_generation(kal_scored)
+        nate_trainer.next_generation(scored_individuals)
         generation += 1
 
         best_result = max(results, key=lambda r: r[1])
@@ -154,11 +146,9 @@ if __name__ == "__main__":
             "worst": worst_fitness,
             "history": first_match_history,
 
-            "expand": best_metrics.metrics.expand_fitness,
-            "economy": best_metrics.metrics.economy_fitness,
-            "attack": best_metrics.metrics.attack_fitness,
-            "defense": best_metrics.metrics.defense_fitness,
-            "assassin": best_metrics.metrics.assassin_fitness,
+            "explore": best_metrics.metrics.explore_fitness,
+            "combat": best_metrics.metrics.combat_fitness,
+            "build": best_metrics.metrics.build_fitness,
             "overlord": best_metrics.metrics.overlord_fitness,
 
             "usage": best_metrics.metrics.strategy_usage.copy(),
