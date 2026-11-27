@@ -110,7 +110,6 @@ if __name__ == "__main__":
     while True:
 
         with Pool() as pool:
-            # game i pairs Nathan's individual i with Kal's weight set i
             results = pool.starmap(evaluate_individual, zip(trainer.population, kal_trainer.population))
 
         scored_individuals = [r[:3] for r in results]
@@ -134,8 +133,6 @@ if __name__ == "__main__":
         print(f"Worst Fitness: {worst_fitness}")
         best_metrics.print_fitness_breakdown()
 
-        # Kal_AI: score each weight set by how its game went, evolve, and save the best
-        # training fitness = land share, plus 1.0 for a win (so a dominant win beats a narrow one)
         kal_scored = [(r[6], r[4] + (1.0 if r[3] == "win" else 0.0)) for r in results]
         kal_best = max(kal_scored, key=lambda x: x[1])
         kal_trainer.save_best(kal_best[0], kal_best[1])
@@ -147,7 +144,6 @@ if __name__ == "__main__":
         trainer.next_generation(scored_individuals)
         generation += 1
 
-        # results[i][5] is the game history
         best_result = max(results, key=lambda r: r[1])
         first_match_history = best_result[5]
 
@@ -158,7 +154,6 @@ if __name__ == "__main__":
             "worst": worst_fitness,
             "history": first_match_history,
 
-            # FIX: these are the field names GameMetrics actually has
             "expand": best_metrics.metrics.expand_fitness,
             "economy": best_metrics.metrics.economy_fitness,
             "attack": best_metrics.metrics.attack_fitness,
@@ -168,7 +163,6 @@ if __name__ == "__main__":
 
             "usage": best_metrics.metrics.strategy_usage.copy(),
 
-            # Kal_AI (Greedy AI) training info for the viewer
             "kal_wins": [r[3] for r in results].count("win"),
             "kal_games": len(results),
             "kal_land": sum(r[4] for r in results) / len(results),
@@ -178,4 +172,4 @@ if __name__ == "__main__":
 
         with open("live_replay.pkl", "wb") as f:
             pickle.dump(replay_packet, f)
-            
+
