@@ -8,7 +8,7 @@ WIDTH = 1800
 HEIGHT = 1000
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Nathan AI Training Visualizer")
+pygame.display.set_caption("Nathan AI vs Kal_AI Training Visualizer")
 
 clock = pygame.time.Clock()
 
@@ -256,6 +256,9 @@ while running:
 
             info_y = 60
 
+            usage = replay_data.get("usage", {})
+            kw = replay_data.get("kal_weights", {})
+
             lines = [
 
                 f"Generation: {replay_data['generation']}",
@@ -292,11 +295,11 @@ while running:
                     (panel_x, info_y)
                 )
 
-                info_y += 22
+                info_y += 20
 
             draw_player_block(
                 panel_x,
-                440,
+                420,
                 "Player 0 - NathanAI",
                 (70, 140, 255),
                 stats[0]
@@ -304,19 +307,34 @@ while running:
 
             draw_player_block(
                 panel_x,
-                560,
-                "Player 1 - RandomAI",
+                530,
+                "Player 1 - Kal_AI (Greedy)",
                 (255, 90, 90),
                 stats[1]
             )
 
             draw_player_block(
                 panel_x,
-                680,
+                640,
                 "Player 2 - RandomAI",
                 (90, 255, 120),
                 stats[2]
             )
+
+            # Kal_AI training progress (shown only if main.py wrote it into the packet)
+            if "kal_wins" in replay_data:
+                kal_lines = [
+                    "Kal_AI this generation:",
+                    f"  Wins: {replay_data['kal_wins']}/{replay_data['kal_games']}",
+                    f"  Avg land share: {replay_data['kal_land']:.3f}",
+                    f"  Best fitness: {replay_data['kal_best_fitness']:.3f}",
+                    "  Best weights:",
+                ]
+                kal_lines += [f"    {k}: {val:.2f}" for k, val in replay_data.get("kal_weights", {}).items()]
+                kal_y = 750
+                for line in kal_lines:
+                    screen.blit(SMALL.render(line, True, (220, 220, 220)), (panel_x, kal_y))
+                    kal_y += 17
 
             if frame_index < len(history) - 1:
                 frame_index += 1
