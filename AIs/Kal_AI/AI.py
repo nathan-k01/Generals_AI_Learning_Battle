@@ -1,28 +1,3 @@
-"""
-Kal_AI  -  a Greedy AI for Generals Arena.
-
-Every turn it scores each legal move with a simple hand-written rule and plays
-the highest-scoring one. It has no neural network. Its scoring weights can be tuned by
-Kal_AI/trainer.py (evolution); with the default weights it is a fixed baseline.
-
-Scoring, from most to least valuable:
-  1. capture an enemy general we can beat       (huge)
-  2. capture an enemy tile / castle we can beat (high)
-  3. capture a neutral tile / castle we can beat (medium)
-  4. step into fog to explore                   (small)
-  5. move our own army toward the enemy / unexplored land (small)
-Attacks that would LOSE are penalised so the AI doesn't throw armies away.
-
-It only uses get_observation() and get_legal_actions(), so it respects fog of war.
-
-Public interface (same as the other AIs in this project):
-    from AIs.Kal_AI.AI import AI
-    ai = AI(weights=None, player_id=1)   # weights: optional dict from the trainer
-    ai.take_turn(env)
-    ai.finish_game(env)
-    ai.get_fitness(env)
-    ai.print_fitness_breakdown()
-"""
 import numpy as np
 
 # The game file lives in the Game package in your project. The fallback lets
