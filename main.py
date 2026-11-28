@@ -158,11 +158,9 @@ if __name__ == "__main__":
             "worst": worst_fitness,
             "history": first_match_history,
 
-            "expand": best_metrics.metrics.expand_fitness,
-            "economy": best_metrics.metrics.economy_fitness,
-            "attack": best_metrics.metrics.attack_fitness,
-            "defense": best_metrics.metrics.defense_fitness,
-            "assassin": best_metrics.metrics.assassin_fitness,
+            "explore": best_metrics.metrics.explore_fitness,
+            "build": best_metrics.metrics.build_fitness,
+            "combat": best_metrics.metrics.combat_fitness,
             "overlord": best_metrics.metrics.overlord_fitness,
 
             "usage": best_metrics.metrics.strategy_usage.copy(),
