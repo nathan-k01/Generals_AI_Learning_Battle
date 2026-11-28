@@ -1,6 +1,8 @@
 import random
 from Game import generals_game
 
+from AIs.JustinAI.AI import AI as JustinAI
+
 import AIs.NathanAI.AI as ai1
 import AIs.NathanAI.trainer as ai1_trainer
 
@@ -50,13 +52,16 @@ def evaluate_individual(individual, kal_weights):
     nathan_ai = ai1.AI(individual)
 
     kal_ai = ai2.AI(weights=kal_weights, player_id=KAL_ID)  
+    
+    justin_ai = JustinAI(player_id=2, iterations=12)
+
 
     while not env.game_over:
         if env.turn == 0:
             for p in env.get_active_players():
                 env.submit_action(p, env.get_legal_actions(p, include_pass=True)[0])
 
-        random_ai_move(env, 2)
+        justin_ai.take_turn(env)
         kal_ai.take_turn(env)
         nathan_ai.take_turn(env)
         if (not env.game_over and not env.has_player_submitted(0)
