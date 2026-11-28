@@ -935,6 +935,7 @@ class GeneralsEnvironment:
                         destination_tile.owner,
                     )
                 )
+                destination_tile.terrain = Terrain.CASTLE
 
             battle_results.append(
                 {

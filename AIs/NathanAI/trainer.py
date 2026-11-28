@@ -15,15 +15,25 @@ class NathanTrainer:
             self.mutator.mutate_individual(individual)
 
     def next_generation(self, scored_individuals):
-        scored_individuals.sort(key=lambda x: x[1], reverse=True)
-        survivors = [item[0] for item in scored_individuals[:20]]
+        overlord_sorted = sorted(scored_individuals, key=lambda x: x[1]["overlord"], reverse=True)
+        explore_sorted = sorted(scored_individuals, key=lambda x: x[1]["explore"], reverse=True)
+        build_sorted = sorted(scored_individuals, key=lambda x: x[1]["build"], reverse=True)
+        combat_sorted = sorted(scored_individuals, key=lambda x: x[1]["combat"], reverse=True)
+        best_overlords = [x[0]["overlord"] for x in overlord_sorted[:10]]
+        best_explorers = [x[0]["explore"] for x in explore_sorted[:10]]
+        best_builders = [x[0]["build"] for x in build_sorted[:10]]
+        best_combat = [x[0]["combat"] for x in combat_sorted[:10]]
 
-        new_population = [scored_individuals[0][0]]
+        new_population = [{"overlord": best_overlords[0][:], "explore": best_explorers[0][:],
+                           "build": best_builders[0][:], "combat": best_combat[0][:]}]
 
         while len(new_population) < len(self.population):
-            parent_a = random.choice(survivors)
-            parent_b = random.choice(survivors)
-            child = self.mutator.crossover(parent_a, parent_b)
+            child = {
+                "overlord": self.mutator.crossover_genome(random.choice(best_overlords), random.choice(best_overlords)),
+                "explore": self.mutator.crossover_genome(random.choice(best_explorers), random.choice(best_explorers)),
+                "build": self.mutator.crossover_genome(random.choice(best_builders), random.choice(best_builders)),
+                "combat": self.mutator.crossover_genome(random.choice(best_combat), random.choice(best_combat)),
+            }
             self.mutator.mutate_individual(child)
             new_population.append(child)
 
@@ -31,7 +41,7 @@ class NathanTrainer:
 
 
 class GenomeManager:
-    SPECIALIST_INPUTS = 80
+    SPECIALIST_INPUTS = 463
     SPECIALIST_HIDDEN = 32
     SPECIALIST_OUTPUTS = 8
 
@@ -79,6 +89,11 @@ class Mutator:
         for genome in individual.values():
             self.genome = genome
             self.mutate_genome(mutation_rate, sigma)
+
+    def crossover_genome(self, genome_a, genome_b):
+        split = random.randint(0, len(genome_a) - 1)
+
+        return (genome_a[:split] + genome_b[split:])
 
     def crossover(self, parent_a, parent_b):
         child = {}

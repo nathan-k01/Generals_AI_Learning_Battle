@@ -64,14 +64,16 @@ def evaluate_individual(individual, kal_weights):   # Kal's candidate weights fo
                 and 0 not in env.eliminated_players):
             env.submit_action(0, generals_game.Action.pass_action())
 
-        if env.turn % 5 == 0:
+        if env.turn % 2 == 0:
             turn_history.append(env.get_full_state())
 
-    fitness = nathan_ai.get_overlord_fitness(env)
+    nathan_ai.get_overlord_fitness(env)
+    fitnesses = {"overlord": nathan_ai.metrics.overlord_fitness, "explore": nathan_ai.metrics.explore_fitness,
+                 "build": nathan_ai.metrics.build_fitness, "combat": nathan_ai.metrics.combat_fitness, }
 
     kal_ai.finish_game(env)
 
-    return (individual, fitness, nathan_ai, kal_ai.outcome, kal_ai.final_territory_share, turn_history,
+    return (individual, fitnesses, nathan_ai, kal_ai.outcome, kal_ai.final_territory_share, turn_history,
             kal_weights, kal_ai.get_fitness(env))
 
 
@@ -100,18 +102,23 @@ if __name__ == "__main__":
         generation = 0
 
     while True:
+        try:
+            nate_trainer.population[0] = (champion["genome"])
+        except NameError:
+            pass
 
         with Pool() as pool:
             results = pool.starmap(evaluate_individual, zip(nate_trainer.population, kal_trainer.population))
 
         scored_individuals = [r[:3] for r in results]
 
-        scored_individuals.sort(key=lambda x: x[1], reverse=True)
+        scored_individuals.sort(key=lambda x: x[1]["overlord"], reverse=True)
         best_individual = scored_individuals[0][0]
-        best_fitness = scored_individuals[0][1]
+        best_fitness = scored_individuals[0][1]["overlord"]
         best_metrics = scored_individuals[0][2]
-        average_fitness = (sum(fitness for _, fitness, _ in scored_individuals) / len(scored_individuals))
-        worst_fitness = scored_individuals[-1][1]
+        average_fitness = (sum(fitness["overlord"] for _, fitness, _ in scored_individuals) / len(scored_individuals))
+
+        worst_fitness = scored_individuals[-1][1]["overlord"]
 
         if best_fitness > highest_fitness:
             highest_fitness = best_fitness
@@ -123,7 +130,13 @@ if __name__ == "__main__":
         print(f"Best Fitness: {best_fitness}")
         print(f"Average Fitness: {average_fitness}")
         print(f"Worst Fitness: {worst_fitness}")
-        best_metrics.print_fitness_breakdown()
+
+        best_scores = scored_individuals[0][1]
+        print(f"Best Overlord: {best_scores['overlord']:.2f}")
+        print(f"Best Explore: {best_scores['explore']:.2f}")
+        print(f"Best Build: {best_scores['build']:.2f}")
+        print(f"Best Combat: {best_scores['combat']:.2f}")
+        # best_metrics.print_fitness_breakdown()
 
         kal_scored = [(r[6], r[4] + (1.0 if r[3] == "win" else 0.0)) for r in results]
         kal_best = max(kal_scored, key=lambda x: x[1])
@@ -136,7 +149,7 @@ if __name__ == "__main__":
         nate_trainer.next_generation(scored_individuals)
         generation += 1
 
-        best_result = max(results, key=lambda r: r[1])
+        best_result = max(results, key=lambda r: r[1]["overlord"])
         first_match_history = best_result[5]
 
         replay_packet = {

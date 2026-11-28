@@ -100,7 +100,7 @@ def get_action_features(env, player_id, action):
             float(int(action.half))]
 
 
-def build_candidate_action_block(env, player_id, actions, limit=8):
+def build_candidate_action_block(env, player_id, actions, limit=50):
     features = []
     for action in actions:
         features.extend(get_action_features(env, player_id, action))
@@ -111,20 +111,38 @@ def build_candidate_action_block(env, player_id, actions, limit=8):
     return features
 
 
-def get_candidate_actions(env, player_id, limit=8):
+def get_candidate_actions(env, player_id, limit=50):
+
     actions = env.get_legal_actions(player_id, include_pass=False)
 
     def score(action):
-        source_tile = env.tile(action.source)
-        target_tile = env.tile(action.destination)
-        value = source_tile.army
+        source = env.tile(action.source)
+        target = env.tile(action.destination)
+        value = 0
 
-        if target_tile.owner != player_id:
-            value += 25
+        # Bigger stacks are more meaningful
+        value += source.army
 
+        # Expand aggressively
+        if target.owner is None:
+            value += 100
+
+        # Capture city
+        if target.terrain == "castle":
+            value += 300
+
+        # Attack enemy
+        if target.owner not in (-1, None, player_id):
+            value += 200
+
+        # Winnable attack
+        if source.army > target.army + 1:
+            value += 100
+        value += (source.army - target.army)
         return value
 
     actions.sort(key=score, reverse=True)
+
     return actions[:limit]
 
 
@@ -188,3 +206,30 @@ def frontline_score(env, player_id):
                 score += tile.army
 
     return score
+
+def nearest_enemy_info(env, player_id):
+    general = env.generals[player_id]
+
+    best_distance = 999
+    best_dx = 0
+    best_dy = 0
+
+    for y in range(env.height):
+        for x in range(env.width):
+
+            tile = env.tile((x, y))
+
+            if tile.owner in (-1, player_id):
+                continue
+
+            dx = x - general[0]
+            dy = y - general[1]
+
+            dist = abs(dx) + abs(dy)
+
+            if dist < best_distance:
+                best_distance = dist
+                best_dx = dx
+                best_dy = dy
+
+    return best_dx, best_dy, best_distance
